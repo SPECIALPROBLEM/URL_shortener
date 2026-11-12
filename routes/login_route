@@ -1,0 +1,32 @@
+
+
+import pool from "../config/db.js";
+
+
+
+
+const login =  async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            "SELECT * FROM short_urls WHERE owner_id = ?",
+            [req.session.userId]
+        );
+
+        console.log(rows); // Temporary debugging
+
+        const shortUrls = rows.map(row => ({
+            full: row.full_url,
+            short: `${req.protocol}://${req.get("host")}/${row.short_code}`,
+            clicks: row.clicks
+        })); 
+
+        res.render("index", { shortUrls });
+
+    } catch (error) {
+        console.error("Error loading URLs:", error);
+        res.status(500).send("Error loading URLs");
+    }
+}
+
+
+export default login

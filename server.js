@@ -2,44 +2,30 @@ import express from "express";
 
 import { nanoid } from "nanoid";
 import pool from "./config/db.js";
-import cookieParser from "cookie-parser";
+
+import bcrypt from "bcrypt";
 
 
-import authenticator from "./middleware/middleware.js";
+import { requireLogin, sessionMiddleware } from "./middleware/middleware.js";
+import signin from "./routes/login_route";
+
+
 
 
 const app = express();
-app.use(cookieParser());
+
 
 app.use(express.static("public"));
 app.use(express.json());
 app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: false }));
-app.use(authenticator);
+app.use(sessionMiddleware);
 
 
-app.get("/", async (req, res) => {
-    try {
-        const [rows] = await pool.query(
-            "SELECT * FROM short_urls WHERE owner_id = ?",
-            [req.visitorId]
-        );
 
-        console.log(rows); // Temporary debugging
+app.get("/", requireLogin, signin);
 
-        const shortUrls = rows.map(row => ({
-            full: row.full_url,
-            short: `${req.protocol}://${req.get("host")}/${row.short_code}`,
-            clicks: row.clicks
-        })); 
 
-        res.render("index", { shortUrls });
-
-    } catch (error) {
-        console.error("Error loading URLs:", error);
-        res.status(500).send("Error loading URLs");
-    }
-});
 app.post("/shortUrls", async (req, res) => {
    const fullUrl = req.body.fullUrl;
      
@@ -50,7 +36,7 @@ app.post("/shortUrls", async (req, res) => {
         const shortCode = nanoid(6);
         await pool.query(
             "INSERT INTO short_urls (full_url, short_code, owner_id) VALUES(?, ?, ?)",
-            [fullUrl, shortCode, req.visitorId]
+            [fullUrl, shortCode, req.session.userId]
         );
         res.redirect("/");
 
@@ -64,6 +50,53 @@ app.post("/shortUrls", async (req, res) => {
 });
 
 
+app.get("/register", (req, res) => res.render("register", { error: null }));
+
+app.post("/register", async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password || password.length < 6) {
+        return res.render("register", { error: "Enter a username and a password of 6+ characters" });
+    }
+    try {
+        const hash = await bcrypt.hash(password, 10);
+        const [result] = await pool.query(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            [username.trim(), hash]
+        );
+        req.session.userId = result.insertId;
+        res.redirect("/");
+    } catch (err) {
+        if (err.code === "ER_DUP_ENTRY") {
+            return res.render("register", { error: "Username already taken" });
+        }
+        console.error(err);
+        res.status(500).send("Server error");
+    }
+});
+
+app.get("/login", (req, res) => res.render("login", { error: null }));
+
+app.post("/login", async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const [rows] = await pool.query("SELECT * FROM users WHERE username = ?", [username]);
+        const user = rows[0];
+        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+            return res.render("login", { error: "Invalid username or password" });
+        }
+        req.session.userId = user.id;
+        res.redirect("/");
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
+    }
+});
+
+app.post("/logout", (req, res) => {
+    req.session.destroy(() => res.redirect("/login"));
+});
+
+
 // Redirect to the original URL
 app.get("/:shortCode", async (req, res) => {
     try {
@@ -71,7 +104,7 @@ app.get("/:shortCode", async (req, res) => {
 
         // Find the original URL in the database
         const [rows] = await pool.query(
-            "SELECT full_url FROM short_urls WHERE owner_id = ?",
+            "SELECT full_url FROM short_urls WHERE short_code = ?",
             [shortCode  ]
         );
 

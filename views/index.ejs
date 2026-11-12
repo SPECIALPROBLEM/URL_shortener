@@ -1,16 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
-
-   
-    
-
-
-
-
-
-
     <meta charset="UTF-8">
     <meta name="viewport"
      content="width=device-width, initial-scale=1.0">
@@ -63,6 +53,9 @@
     
 
     <div class="container">
+        <form action="/logout" method="POST" class="text-end">
+    <button class="btn btn-outline-dark btn-sm" type="submit">Log out</button>
+</form>
         <h1>URL Shortener</h1>
             <form action="/shortUrls" method="POST" class="my-4">
     <label for="fullUrl" class="visually-hidden">

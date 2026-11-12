@@ -1,21 +1,16 @@
-import { randomUUID } from "crypto";
 
-const authenticator = (req, res, next) => {
-    let id = req.cookies.visitorId;
-    if (!id) {
-        id = randomUUID();
-        res.cookie("visitorId", id, {
-            httpOnly: true,
-            sameSite: "lax",
-            maxAge: 1000 * 60 * 60 * 24 * 30 // 30 days
-         });
-    }
-    req.visitorId = id;
+import session from "express-session";
+export const sessionMiddleware=session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { httpOnly: true, sameSite: "lax", maxAge: 1000 * 60 * 60 * 24 * 7 }
+});
+
+export function requireLogin(req, res, next) {
+    if (!req.session.userId) return res.redirect("/login");
     next();
 }
 
-
-
-export default authenticator
 
 
